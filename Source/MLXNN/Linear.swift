@@ -70,8 +70,8 @@ public class Identity: Module, UnaryLayer {
 /// - ``Bilinear``
 open class Linear: Module, UnaryLayer {
 
-    public let weight: MLXArray
-    public let bias: MLXArray?
+    public var weight: MLXArray
+    public var bias: MLXArray?
 
     public var shape: (Int, Int) {
         weight.shape2
