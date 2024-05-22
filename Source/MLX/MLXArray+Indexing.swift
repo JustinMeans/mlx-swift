@@ -3,11 +3,11 @@
 import Cmlx
 import Foundation
 
-private func arange(_ count: Int) -> [Int32] {
+public func arange(_ count: Int) -> [Int32] {
     Array(0 ..< Int32(count))
 }
 
-private func arange(_ start: Int, _ end: Int) -> [Int32] {
+public func arange(_ start: Int, _ end: Int) -> [Int32] {
     Array(Int32(start) ..< Int32(end))
 }
 
