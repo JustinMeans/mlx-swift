@@ -2,6 +2,7 @@
 
 import Cmlx
 import Foundation
+import Metal
 
 /// Properties to control the the GPU memory allocation and buffer reuse.
 ///
@@ -20,6 +21,8 @@ import Foundation
 /// - ``set(memoryLimit:relaxed:)``
 /// - ``snapshot()``
 public enum GPU {
+
+    static let queue = DispatchQueue(label: "GPUEnum")
 
     static var _relaxedMemoryLimit = true
     static var _cacheLimit: Int?
@@ -72,7 +75,7 @@ public enum GPU {
     /// ### See Also
     /// - ``snapshot()``
     /// - <doc:running-on-ios>
-    public struct Snapshot: CustomStringConvertible, Codable {
+    public struct Snapshot: CustomStringConvertible, Codable, Sendable {
 
         /// See ``GPU/activeMemory``.
         public var activeMemory: Int
@@ -163,16 +166,18 @@ public enum GPU {
     /// ### See Also
     /// - ``set(cacheLimit:)``
     public static var cacheLimit: Int {
-        if let cacheLimit = _cacheLimit {
-            return cacheLimit
-        }
+        queue.sync {
+            if let cacheLimit = _cacheLimit {
+                return cacheLimit
+            }
 
-        // set it to a reasonable value in order to read it, then set it back
-        // to current
-        let current = mlx_metal_set_cache_limit(cacheMemory)
-        mlx_metal_set_cache_limit(current)
-        _cacheLimit = current
-        return current
+            // set it to a reasonable value in order to read it, then set it back
+            // to current
+            let current = mlx_metal_set_cache_limit(cacheMemory)
+            mlx_metal_set_cache_limit(current)
+            _cacheLimit = current
+            return current
+        }
     }
 
     /// Set the free cache limit.
@@ -185,8 +190,10 @@ public enum GPU {
     ///
     /// Returns the previous cache limit.
     public static func set(cacheLimit: Int) {
-        _cacheLimit = cacheLimit
-        mlx_metal_set_cache_limit(cacheLimit)
+        queue.sync {
+            _cacheLimit = cacheLimit
+            mlx_metal_set_cache_limit(cacheLimit)
+        }
     }
 
     /// Get the memory limit.
@@ -198,13 +205,15 @@ public enum GPU {
     /// ### See Also
     /// - ``set(memoryLimit:relaxed:)``
     public static var memoryLimit: Int {
-        if let memoryLimit = _memoryLimit {
-            return memoryLimit
-        }
+        queue.sync {
+            if let memoryLimit = _memoryLimit {
+                return memoryLimit
+            }
 
-        let current = mlx_metal_set_memory_limit(activeMemory, _relaxedMemoryLimit)
-        mlx_metal_set_memory_limit(current, _relaxedMemoryLimit)
-        return current
+            let current = mlx_metal_set_memory_limit(activeMemory, _relaxedMemoryLimit)
+            mlx_metal_set_memory_limit(current, _relaxedMemoryLimit)
+            return current
+        }
     }
 
     /// Set the memory limit.
@@ -217,9 +226,11 @@ public enum GPU {
     /// The memory limit defaults to 1.5 times the maximum recommended working set
     /// size reported by the device ([recommendedMaxWorkingSetSize](https://developer.apple.com/documentation/metal/mtldevice/2369280-recommendedmaxworkingsetsize))
     public static func set(memoryLimit: Int, relaxed: Bool = true) {
-        _relaxedMemoryLimit = relaxed
-        _memoryLimit = memoryLimit
-        mlx_metal_set_memory_limit(memoryLimit, relaxed)
+        queue.sync {
+            _relaxedMemoryLimit = relaxed
+            _memoryLimit = memoryLimit
+            mlx_metal_set_memory_limit(memoryLimit, relaxed)
+        }
     }
 
     /// Cause all cached metal buffers to be deallocated.
@@ -251,4 +262,43 @@ public enum GPU {
         mlx_metal_stop_capture()
     }
 
+    /// Reset the peak memory to zero.
+    ///
+    /// See ``Snapshot/peakMemory``.
+    public static func resetPeakMemory() {
+        mlx_metal_reset_peak_memory()
+    }
+
+    public struct DeviceInfo: Sendable {
+        let architecture: String
+        let maxBufferSize: Int
+        let maxRecommendedWorkingSetSize: UInt64
+        let memorySize: Int
+    }
+
+    /// Get information about the GPU device and system settings
+    public static func deviceInfo() -> DeviceInfo {
+        var mib = [CTL_HW, HW_MEMSIZE]
+        var memSize: size_t = 0
+        var length: size_t = MemoryLayout.size(ofValue: memSize)
+        sysctl(&mib, 2, &memSize, &length, nil, 0)
+
+        if let device = MTLCreateSystemDefaultDevice() {
+            let architecture: String
+            if #available(macOS 14.0, iOS 17.0, *) {
+                architecture = device.architecture.name
+            } else {
+                architecture = device.name
+            }
+
+            return DeviceInfo(
+                architecture: architecture, maxBufferSize: device.maxBufferLength,
+                maxRecommendedWorkingSetSize: device.recommendedMaxWorkingSetSize,
+                memorySize: memSize)
+        } else {
+            return DeviceInfo(
+                architecture: "Unknown", maxBufferSize: 0, maxRecommendedWorkingSetSize: 0,
+                memorySize: memSize)
+        }
+    }
 }

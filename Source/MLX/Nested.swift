@@ -36,7 +36,8 @@ public func indentedDescription(_ value: Any, _ indent: Int) -> String {
 ///
 /// ### See Also
 /// - ``NestedDictionary``
-/// - ``NestedDictionary/mapValues(transform:)``
+/// - ``NestedDictionary/mapValues(transform:)-1ehvq``
+/// - ``NestedDictionary/mapValues(transform:)-4q1m3``
 /// - ``NestedDictionary/flattened(prefix:)``
 /// - ``NestedDictionary/unflattened(_:)-4p8bn``
 public indirect enum NestedItem<Key: Hashable, Element>: IndentedDescription {
@@ -62,10 +63,10 @@ public indirect enum NestedItem<Key: Hashable, Element>: IndentedDescription {
 
     /// Transform the values in the nested structure using the `transform()` function.
     ///
-    /// This is typically called via ``NestedDictionary/mapValues(transform:)``.
+    /// This is typically called via ``NestedDictionary/mapValues(transform:)-1ehvq``.
     ///
     /// ### See Also
-    /// - ``NestedDictionary/mapValues(transform:)``
+    /// - ``NestedDictionary/mapValues(transform:)-1ehvq``
     public func mapValues<Result>(_ transform: (Element) throws -> Result) rethrows -> NestedItem<
         Key, Result
     > {
@@ -392,6 +393,31 @@ public indirect enum NestedItem<Key: Hashable, Element>: IndentedDescription {
         }
     }
 
+    /// Reduces the contents of the NestedDictionary by visiting each value and applying the `reducer`
+    /// function, accumulating the result.
+    ///
+    /// Typically called via ``NestedDictionary/reduce(_:_:)``.
+    public func reduce<R>(_ initialValue: R, _ reducer: (R, Element) throws -> R) rethrows -> R {
+        switch self {
+        case .none:
+            return initialValue
+        case .value(let element):
+            return try reducer(initialValue, element)
+        case .array(let array):
+            var v = initialValue
+            for item in array {
+                v = try item.reduce(v, reducer)
+            }
+            return v
+        case .dictionary(let dictionary):
+            var v = initialValue
+            for item in dictionary.values {
+                v = try item.reduce(v, reducer)
+            }
+            return v
+        }
+    }
+
     /// Return a flattened representation of the structured contents as an array of key/value tuples.
     ///
     /// This is typically called via ``NestedDictionary/flattened(prefix:)``.
@@ -607,6 +633,9 @@ public indirect enum NestedItem<Key: Hashable, Element>: IndentedDescription {
 }
 
 extension NestedItem: Equatable where Element: Equatable {
+}
+
+extension NestedItem: Sendable where Element: Sendable, Key: Sendable {
 }
 
 /// Nested structure of arrays, dictionaries and values.
@@ -870,6 +899,12 @@ public struct NestedDictionary<Key: Hashable, Element>: CustomStringConvertible 
         }
     }
 
+    /// Reduces the contents of the NestedDictionary by visiting each value and applying the `reducer`
+    /// function, accumulating the result.
+    public func reduce<R>(_ initialValue: R, _ reducer: (R, Element) throws -> R) rethrows -> R {
+        try NestedItem.dictionary(contents).reduce(initialValue, reducer)
+    }
+
     /// Transform the values in the nested structure using the `transform()` function.
     public func compactMapValues<Result>(transform: (Element) throws -> Result?) rethrows
         -> NestedDictionary<Key, Result>
@@ -963,6 +998,9 @@ public struct NestedDictionary<Key: Hashable, Element>: CustomStringConvertible 
 }
 
 extension NestedDictionary: Equatable where Element: Equatable {
+}
+
+extension NestedDictionary: Sendable where Element: Sendable, Key: Sendable {
 }
 
 extension NestedDictionary: Collection {

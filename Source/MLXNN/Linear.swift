@@ -68,7 +68,7 @@ public class Identity: Module, UnaryLayer {
 /// - <doc:custom-layers>
 /// - ``QuantizedLinear``
 /// - ``Bilinear``
-open class Linear: Module, UnaryLayer {
+open class Linear: Module, UnaryLayer, Quantizable {
 
     public var weight: MLXArray
     public var bias: MLXArray?
@@ -128,6 +128,10 @@ open class Linear: Module, UnaryLayer {
             result = matmul(x, weight.T)
         }
         return result
+    }
+
+    public func toQuantized(groupSize: Int, bits: Int) -> Module {
+        QuantizedLinear(self, groupSize: groupSize, bits: bits)
     }
 }
 
