@@ -7,12 +7,21 @@ private func circularPad2d(_ x: MLXArray, padding: (Int, Int)) -> MLXArray {
     let (_, H, W, _) = x.shape4
     let (padH, padW) = padding
     guard padH > 0 || padW > 0 else { return x }
-    var y = tiled(x, repetitions: [1, 3, 3, 1])
-    let hStart = H - padH
-    let hEnd = H * 2 + padH
-    let wStart = W - padW
-    let wEnd = W * 2 + padW
-    y = y[0..., hStart ..< hEnd, wStart ..< wEnd, 0...]
+
+    var y = x
+
+    if padH > 0 {
+        let top = x[0..., H - padH ..< H, 0..., 0...]
+        let bottom = x[0..., 0 ..< padH, 0..., 0...]
+        y = concatenated([top, y, bottom], axis: 1)
+    }
+
+    if padW > 0 {
+        let left = y[0..., 0..., W - padW ..< W, 0...]
+        let right = y[0..., 0..., 0 ..< padW, 0...]
+        y = concatenated([left, y, right], axis: 2)
+    }
+
     return y
 }
 
