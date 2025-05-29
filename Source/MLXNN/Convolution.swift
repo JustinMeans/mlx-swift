@@ -3,6 +3,19 @@
 import Foundation
 import MLX
 
+private func circularPad2d(_ x: MLXArray, padding: (Int, Int)) -> MLXArray {
+    let (_, H, W, _) = x.shape4
+    let (padH, padW) = padding
+    guard padH > 0 || padW > 0 else { return x }
+    var y = tiled(x, repetitions: [1, 3, 3, 1])
+    let hStart = H - padH
+    let hEnd = H * 2 + padH
+    let wStart = W - padW
+    let wEnd = W * 2 + padW
+    y = y[0..., hStart ..< hEnd, wStart ..< wEnd, 0...]
+    return y
+}
+
 /// Applies a 1-dimensional convolution over the multi-channel input sequence.
 ///
 /// ### See Also
@@ -72,6 +85,11 @@ open class Conv1d: Module, UnaryLayer {
 /// - ``Conv1d``
 /// - ``Conv3d``
 /// - ``init(inputChannels:outputChannels:kernelSize:stride:padding:dilation:groups:bias:)``
+public enum Conv2dPaddingMode {
+    case zeros
+    case circular
+}
+
 open class Conv2d: Module, UnaryLayer {
 
     public let weight: MLXArray
@@ -80,6 +98,7 @@ open class Conv2d: Module, UnaryLayer {
     public let dilation: (Int, Int)
     public let stride: (Int, Int)
     public let groups: Int
+    public let paddingMode: Conv2dPaddingMode
 
     /// Applies a 2-dimensional convolution over the multi-channel input image.
     ///
@@ -107,7 +126,8 @@ open class Conv2d: Module, UnaryLayer {
         padding: IntOrPair = 0,
         dilation: IntOrPair = 1,
         groups: Int = 1,
-        bias: Bool = true
+        bias: Bool = true,
+        paddingMode: Conv2dPaddingMode = .zeros
     ) {
         let scale = sqrt(1 / Float(inputChannels * kernelSize.first * kernelSize.second))
 
@@ -119,11 +139,20 @@ open class Conv2d: Module, UnaryLayer {
         self.dilation = dilation.values
         self.stride = stride.values
         self.groups = groups
+        self.paddingMode = paddingMode
     }
 
     open func callAsFunction(_ x: MLXArray) -> MLXArray {
+        let input: MLXArray
+        switch paddingMode {
+        case .zeros:
+            input = x
+        case .circular:
+            input = circularPad2d(x, padding: padding)
+        }
+
         var y = conv2d(
-            x, weight, stride: .init(stride), padding: .init(padding), dilation: .init(dilation),
+            input, weight, stride: .init(stride), padding: .init(paddingMode == .zeros ? padding : (0, 0)), dilation: .init(dilation),
             groups: groups)
         if let bias {
             y = y + bias
